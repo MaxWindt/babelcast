@@ -37,7 +37,7 @@ var (
 )
 
 func main() {
-	port := flag.Int("port", 8080, "listen on this port")
+	port := flag.Int("port", 80, "listen on this port")
 	debug := flag.Bool("debug", false, "enable debug log")
 	flag.Parse()
 

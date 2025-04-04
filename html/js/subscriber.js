@@ -4,6 +4,17 @@ var getChannelsId = setInterval(function () {
   wsSend(val);
 }, 1000);
 
+document.getElementById("play").addEventListener("click", function () {
+  const audio = document.getElementById("audio");
+  if (audio) {
+    if (audio.paused) {
+      audio.play();
+    } else {
+      audio.pause();
+    }
+  }
+});
+
 function updateChannels(channels) {
   let channelsEle = document.querySelector("#channels div");
   channelsEle.innerHTML = "";
@@ -26,10 +37,6 @@ function updateChannels(channels) {
     });
 
     channels.forEach((channel) => {
-      let li = document.createElement("div");
-      li.classList.add("mdl-card__actions", "mdl-card--border");
-
-      // Create the button for the channel
       let channelButton = document.createElement("a");
       channelButton.classList.add(
         "button",
@@ -52,18 +59,64 @@ function updateChannels(channels) {
           '<i class="material-icons">music_note</i> ' + channel;
       }
 
-      // Add event listener for the button
-      setupChannelButton(channelButton);
+      // Add event listener
+      channelButton.addEventListener("click", function () {
+        channelClick(this);
+      });
 
-      // Append the button to the list item
-      li.appendChild(channelButton);
-
-      // Append the list item to the channel list
+      // Append the button to the channel list
       channelsEle.appendChild(channelButton);
     });
   }
 
   translate_text();
+}
+
+function channelClick(buttonElement) {
+  if (buttonElement.classList.contains("playing")) {
+    const audio = document.getElementById("audio");
+    if (audio) {
+      if (audio.paused) {
+        audio.play();
+      } else {
+        audio.pause();
+      }
+    }
+  } else {
+    document.getElementById("play").classList.add("hidden");
+    document.getElementById("spinner").classList.remove("hidden");
+
+    // Remove 'playing' class from all channels
+    document.querySelectorAll(".playing").forEach((el) => {
+      el.classList.remove("playing");
+    });
+
+    // Add 'playing' class to this channel
+    buttonElement.classList.add("playing");
+
+    // Connect to the selected channel
+    let params = {};
+    params.Channel = buttonElement.id;
+
+    // Store the channel selection
+    localStorage.setItem("lab_channel", params.Channel);
+
+    // Clean up existing connections properly, this will start a new connection
+    cleanupConnections();
+    console.log("connect_subscriber", params);
+    //  TODO we need to re initialize conncection. Else: server error: InvalidStateError: operation can not be run in current signaling state
+    let val = { Key: "connect_subscriber", Value: params };
+    wsSend(val);
+  }
+}
+
+function cleanupConnections() {
+  // Close any existing audio tracks
+  const audio = document.getElementById("audio");
+  if (audio) {
+    audio.pause();
+    audio.srcObject = null;
+  }
 }
 
 function closeWS() {
@@ -73,470 +126,158 @@ function closeWS() {
 }
 
 function hardReload() {
-  // Close the existing PeerConnection
+  // Close the existing connections
   closeWS();
   window.location.reload(true);
 }
-function switchChannel(channelId) {
-  // Store the new channel
-  localStorage.setItem("lab_channel", channelId);
 
-  // Clean up existing connections properly, this will start a new connection
-  cleanupConnections();
-}
-
-function cleanupConnections() {
-  // Close peer connection if it exists
-  if (pc) {
-    pc.getSenders().forEach((sender) => {
-      if (sender.track) {
-        sender.track.stop();
-      }
-    });
-    pc.close();
-  }
-
-  // Close WebSocket if it exists
-  if (ws) {
-    ws.close();
-  }
-
-  // Reset audio element
-  const audio = document.getElementById("audio");
-  if (audio) {
-    audio.srcObject = null;
-  }
-}
-
-function initializeConnection() {
-  ws = new WebSocket(ws_uri);
-  pc = new RTCPeerConnection({
-    iceServers: [
-      {
-        urls: "stun:stun.l.google.com:19302",
-      },
-    ],
-  });
-
-  setupWebSocketHandlers(ws);
-  setupWebRTCHandlers(pc);
-  createOffer(pc);
-}
-
-function setupWebRTCHandlers(pc) {
-  // Single consolidated track handler
-  pc.ontrack = function (event) {
-    let audio = document.getElementById("audio");
-
-    if (audio) {
-      console.log("updating stream");
-      audio.srcObject = event.streams[0];
-    } else {
-      let el = document.createElement(event.track.kind);
-      el.srcObject = event.streams[0];
-      el.autoplay = true;
-      el.playsInline = true;
-      el.id = "audio";
-
-      const media_placeholder = document.getElementById("media");
-      media_placeholder.innerHTML = "";
-      media_placeholder.appendChild(el);
-      audio = el;
-    }
-
-    setupAudioHandlers(audio); // Moved audio-specific handlers to separate function
-  };
-
-  pc.oniceconnectionstatechange = function (e) {
-    debug("ICE state:", pc.iceConnectionState);
-    switch (pc.iceConnectionState) {
-      case "connected":
+ws.onmessage = function (e) {
+  let wsMsg = JSON.parse(e.data);
+  if ("Key" in wsMsg) {
+    switch (wsMsg.Key) {
+      case "info":
+        debug("server info: " + wsMsg.Value);
+        break;
+      case "error":
+        error("server error:", wsMsg.Value);
+        document.getElementById("channels").classList.add("hidden");
+        localStorage.removeItem("lab_channel");
+        hardReload();
+        break;
+      case "sd_answer":
+        startSession(wsMsg.Value);
+        break;
+      case "channels":
+        updateChannels(wsMsg.Value);
+        break;
+      case "session_received": // Wait for confirmation from server
+        document.getElementById("channels").classList.remove("hidden");
+        document.getElementById("block_buttons_layer").classList.add("hidden");
         document.getElementById("spinner").classList.add("hidden");
-        let cb = document.getElementById("connect-button");
-        if (cb) {
-          cb.classList.remove("hidden");
+
+        // Auto-connect to the previously selected channel if available
+        if (localStorage.getItem("lab_channel")) {
+          const channelId = localStorage.getItem("lab_channel");
+          const channelButton = document.getElementById(channelId);
+          if (channelButton) {
+            channelClick(channelButton);
+          }
         }
         break;
-      case "failed":
-      case "disconnected":
-      case "closed":
-        // Handle disconnection states
+      case "ice_candidate":
+        pc.addIceCandidate(wsMsg.Value);
+        break;
+      case "channel_closed":
+        error("channel '" + wsMsg.Value + "' closed by server");
         break;
     }
-  };
-
-  pc.onicecandidate = function (e) {
-    if (e.candidate && e.candidate.candidate !== "") {
-      wsSend({
-        Key: "ice_candidate",
-        Value: e.candidate,
-      });
-    }
-  };
-}
-
-function setupWebSocketHandlers(ws) {
-  // Single consolidated message handler
-  ws.onmessage = function (e) {
-    let wsMsg = JSON.parse(e.data);
-    if ("Key" in wsMsg) {
-      switch (wsMsg.Key) {
-        case "info":
-          debug("server info:", wsMsg.Value);
-          break;
-        case "error":
-          error("server error:", wsMsg.Value);
-          document.getElementById("channels").classList.add("hidden");
-          localStorage.removeItem("channel");
-          hardReload();
-          break;
-        case "sd_answer":
-          startSession(wsMsg.Value);
-          break;
-        case "channels":
-          updateChannels(wsMsg.Value);
-          break;
-        case "session_established":
-          document.getElementById("channels").classList.remove("hidden");
-          document
-            .getElementById("block_buttons_layer")
-            .classList.add("hidden");
-          document.getElementById("spinner").classList.add("hidden");
-          console.log("session_established");
-          if (localStorage.getItem("lab_channel")) {
-            let params = {
-              Channel: localStorage.getItem("lab_channel"),
-            };
-            document.getElementById(params.Channel).classList.add("playing");
-            wsSend({
-              Key: "connect_subscriber",
-              Value: params,
-            });
-          }
-          break;
-        case "ice_candidate":
-          pc.addIceCandidate(wsMsg.Value);
-          break;
-
-        case "channel_closed":
-          error("channel '" + wsMsg.Value + "' closed by server");
-
-          break;
-      }
-    }
-  };
-
-  // Single consolidated close handler
-  ws.onclose = function () {
-    error("websocket connection closed");
-    pc.close();
-    document.getElementById("media").classList.add("hidden");
-    // Restart connection if websocket was closed
-    initializeConnection();
-  };
-
-  ws.onopen = function () {
-    debug("WS connection open");
-  };
-}
-
-function createOffer(pc) {
-  pc.addTransceiver("audio"); // Move this here from global scope
-
-  return pc
-    .createOffer()
-    .then((offer) => {
-      return pc.setLocalDescription(offer);
-    })
-    .then(() => {
-      wsSend({
-        Key: "session_subscriber",
-        Value: pc.localDescription,
-      });
-    })
-    .catch((err) => {
-      console.error("Error creating offer:", err);
-      debug(err);
-    });
-}
-
-function handleRemoteAnswer(sdp) {
-  const answer = new RTCSessionDescription({
-    type: "answer",
-    sdp: sdp,
-  });
-
-  pc.setRemoteDescription(answer).catch((err) => {
-    console.error("Error setting remote description:", err);
-    debug(err);
-  });
-}
-
-function handleRemoteCandidate(candidate) {
-  pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) => {
-    console.error("Error adding ICE candidate:", err);
-    debug(err);
-  });
-}
-
-function handleSessionEstablished() {
-  document.getElementById("channels").classList.remove("hidden");
-  document.getElementById("block_buttons_layer").classList.add("hidden");
-  document.getElementById("spinner").classList.add("hidden");
-
-  if (localStorage.getItem("lab_channel")) {
-    let params = {
-      Channel: localStorage.getItem("lab_channel"),
-    };
-    document.getElementById(params.Channel).classList.add("playing");
-    wsSend({
-      Key: "connect_subscriber",
-      Value: params,
-    });
   }
-}
+};
 
-// Modify your channel button click handler
-function setupChannelButton(channelButton) {
-  channelButton.addEventListener("click", function handleClick() {
-    if (this.classList.contains("playing")) {
-      const audio = document.getElementById("audio");
-      if (audio?.paused) {
-        audio.play();
-      } else {
-        audio.pause();
-      }
-    } else {
-      document.getElementById("play").classList.add("hidden");
-      document.getElementById("spinner").classList.remove("hidden");
+ws.onclose = function () {
+  error("websocket connection closed");
+  pc.close();
+  document.getElementById("media").classList.add("hidden");
+  clearInterval(getChannelsId);
 
-      // Remove 'playing' class from all channels
-      document.querySelectorAll(".playing").forEach((el) => {
-        el.classList.remove("playing");
-      });
+  // We could reconnect here, but for simplicity we'll just let the user reload
+  // the page manually. For a more robust solution, you could implement
+  // an automatic reconnection with exponential backoff.
+};
 
-      // Add 'playing' class to this channel
-      this.classList.add("playing");
+//
+// -------- WebRTC ------------
+//
 
-      switchChannel(this.id);
-    }
-  });
-}
+pc.ontrack = function (event) {
+  debug("webrtc: ontrack");
+
+  let audio;
+  const mediaContainer = document.getElementById("media");
+
+  // Clear the media container if needed
+  if (mediaContainer.innerHTML.trim() !== "") {
+    mediaContainer.innerHTML = "";
+  }
+
+  // Create a new audio element
+  audio = document.createElement("audio");
+  audio.id = "audio";
+  audio.srcObject = event.streams[0];
+  audio.autoplay = true;
+  audio.playsInline = true;
+
+  // Add the audio element to the page
+  mediaContainer.appendChild(audio);
+
+  // Setup audio event handlers
+  setupAudioHandlers(audio);
+
+  // Show the media container and play button
+  mediaContainer.classList.remove("hidden");
+  document.getElementById("play").classList.remove("hidden");
+};
 
 function setupAudioHandlers(audio) {
   const playButton = document.getElementById("play");
-  playButton.classList.remove("hidden");
 
   // Visibility change handler
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible" && audio.paused) {
-      hardReload();
+      // Try to play when coming back to page
+      audio.play().catch((err) => {
+        console.error("Failed to play audio:", err);
+      });
     }
   });
 
   // Audio state handlers
-  audio.onended = () => {
-    console.log("stream ended, reloading...");
-    closeWS();
+  audio.onended = function () {
+    console.log("stream ended");
+    // Don't automatically reload, allow user to reconnect manually
+    playButton.innerHTML = "replay";
   };
 
-  audio.onwaiting = () => {
-    console.log("waiting for audio data, reloading...");
-    closeWS();
+  audio.onwaiting = function () {
+    console.log("waiting for audio data");
+    document.getElementById("spinner").classList.remove("hidden");
   };
 
-  audio.onerror = () => {
-    console.log("error loading audio data, reloading...");
-    closeWS();
+  audio.oncanplaythrough = function () {
+    document.getElementById("spinner").classList.add("hidden");
   };
 
-  // Time update handler
-  let currentTime = null;
-  audio.ontimeupdate = () => {
-    let lastTime = currentTime;
-    currentTime = Math.floor(audio.currentTime);
-    if (currentTime !== lastTime) {
-      let hours = Math.floor(currentTime / 3600);
-      let minutes = Math.floor((currentTime % 3600) / 60);
-      let seconds = currentTime % 60;
-      console.log(`${hours}:${minutes}:${seconds}`);
-    }
+  audio.onerror = function () {
+    console.log("error loading audio data");
+    playButton.innerHTML = "error";
   };
 
   // Play/Pause button handlers
-  playButton.onclick = () => {
-    if (audio.paused) {
-      audio.play();
-    } else {
-      audio.pause();
-    }
-  };
-
-  audio.onplay = () => {
+  audio.onplay = function () {
     playButton.innerHTML = '<i class="material-icons">pause</i>';
   };
 
-  audio.onpause = () => {
+  audio.onpause = function () {
     playButton.innerHTML = '<i class="material-icons">play_arrow</i>';
   };
 
-  // Initial play button state
-  setTimeout(() => {
-    if (audio.paused) {
-      playButton.innerHTML = '<i class="material-icons">play_arrow</i>';
-    }
-  }, 500);
+  // Set initial button state
+  playButton.innerHTML = '<i class="material-icons">play_arrow</i>';
 }
 
-function setupEventHandlers() {
-  // WebSocket event handlers
-  ws.onmessage = function (e) {
-    // Your existing onmessage handler
-    let wsMsg = JSON.parse(e.data);
-    if ("Key" in wsMsg) {
-      switch (wsMsg.Key) {
-        case "info":
-          debug("server info:", wsMsg.Value);
-          break;
-        case "error":
-          error("server error:", wsMsg.Value);
-          document.getElementById("channels").classList.add("hidden");
-          localStorage.removeItem("channel");
-          hardReload();
-          break;
-        case "sd_answer":
-          startSession(wsMsg.Value);
-          break;
-        case "channels":
-          updateChannels(wsMsg.Value);
-          break;
-        case "session_established":
-          document.getElementById("channels").classList.remove("hidden");
-          document
-            .getElementById("block_buttons_layer")
-            .classList.add("hidden");
-          document.getElementById("spinner").classList.add("hidden");
-          console.log("session_established");
-          if (localStorage.getItem("lab_channel") !== null || undefined) {
-            let params = {};
-            params.Channel = localStorage.getItem("lab_channel");
-            document.getElementById(params.Channel).classList.add("playing");
-            let val = { Key: "connect_subscriber", Value: params };
-            wsSend(val);
-          }
-          break;
-        case "ice_candidate":
-          pc.addIceCandidate(wsMsg.Value);
-          break;
-      }
-    }
-  };
+pc.addTransceiver("audio");
 
-  ws.onopen = function () {
-    debug("WS connection open");
-  };
+let f = () => {
+  debug("webrtc: create offer");
+  pc.createOffer()
+    .then((d) => {
+      debug("webrtc: set local description");
+      pc.setLocalDescription(d);
+      let val = { Key: "session_subscriber", Value: d };
+      wsSend(val);
+    })
+    .catch(debug);
+};
 
-  ws.onclose = function () {
-    debug("WS connection closed");
-  };
-
-  // WebRTC event handlers
-  pc.ontrack = function (event) {
-    let audio = document.getElementById("audio");
-
-    if (audio) {
-      console.log("updating stream");
-      audio.srcObject = event.streams[0];
-    } else {
-      let el = document.createElement(event.track.kind);
-      el.srcObject = event.streams[0];
-      el.autoplay = true;
-      el.playsInline = true;
-      el.id = "audio";
-
-      const media_placeholder = document.getElementById("media");
-      media_placeholder.innerHTML = "";
-      media_placeholder.appendChild(el);
-    }
-    document.getElementById("play").classList.remove("hidden");
-    audio = document.getElementById("audio");
-
-    document.addEventListener("visibilitychange", function () {
-      if (document.visibilityState === "visible" && audio.paused) {
-        hardReload();
-      }
-    });
-
-    audio.onended = function () {
-      console.log("stream ended, reloading...");
-      closeWS();
-    };
-    audio.onwaiting = function () {
-      console.log("waiting for audio data, reloading...");
-      closeWS();
-    };
-    audio.onerror = function () {
-      console.log("error loading audio data, reloading...");
-      closeWS();
-    };
-
-    let currentTime = null;
-    audio.ontimeupdate = function () {
-      let lastTime = currentTime;
-      currentTime = Math.floor(audio.currentTime);
-      if (currentTime !== lastTime) {
-        let hours = Math.floor(currentTime / 3600);
-        let minutes = Math.floor((currentTime % 3600) / 60);
-        let seconds = currentTime % 60;
-        console.log(`${hours}:${minutes}:${seconds}`);
-      }
-    };
-
-    let playButton = document.getElementById("play");
-    playButton.onclick = function () {
-      if (audio.paused) {
-        audio.play();
-      } else {
-        audio.pause();
-      }
-    };
-
-    audio.onplay = function () {
-      playButton.innerHTML = '<i class="material-icons">pause</i>';
-    };
-    audio.onpause = function () {
-      playButton.innerHTML = '<i class="material-icons">play_arrow</i>';
-    };
-
-    playButton.classList.remove("hidden");
-    setTimeout(function () {
-      if (audio.paused) {
-        playButton.innerHTML = '<i class="material-icons">play_arrow</i>';
-      }
-    }, 500);
-  };
-
-  pc.oniceconnectionstatechange = function (e) {
-    debug("ICE state:", pc.iceConnectionState);
-    switch (pc.iceConnectionState) {
-      case "new":
-      case "checking":
-      case "failed":
-      case "disconnected":
-      case "closed":
-      case "completed":
-        break;
-      case "connected":
-        document.getElementById("spinner").classList.add("hidden");
-        let cb = document.getElementById("connect-button");
-        if (cb) {
-          cb.classList.remove("hidden");
-        }
-        break;
-      default:
-        debug("ice state unknown", e);
-        break;
-    }
-  };
-}
-initializeConnection();
+// Create offer if WS is ready, otherwise queue
+ws.readyState == WebSocket.OPEN ? f() : onWSReady.push(f);
