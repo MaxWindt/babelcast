@@ -49,13 +49,12 @@ function initializeSubscriber() {
         // Set the innerHTML and icon based on the channel name
         if (/live|original/i.test(channel)) {
           channelButton.innerHTML =
-            '<i class="material-icons">record_voice_over</i> <i id=btn_original>Original</i>';
+            '<i class="icon-mic"></i> <i id=btn_original>Original</i>';
         } else if (/translation|uebersetzung/i.test(channel)) {
           channelButton.innerHTML =
-            '<i class="material-icons">translate</i> <i id=btn_translation>Translation</i>';
+            '<i class="icon-language-1"></i> <i id=btn_translation>Translation</i>';
         } else {
-          channelButton.innerHTML =
-            '<i class="material-icons">music_note</i> ' + channel;
+          channelButton.innerHTML = '<i class="icon-language"></i> ' + channel;
         }
 
         // Add event listener
@@ -240,7 +239,8 @@ function initializeSubscriber() {
     audio.onended = function () {
       console.log("stream ended");
       // Don't automatically reload, allow user to reconnect manually
-      playButton.innerHTML = "replay";
+      playButton.innerHTML = '<i class="icon-arrows-cw"></i>';
+      playButton.onclick = () => window.location.reload(true);
     };
 
     audio.onwaiting = function () {
@@ -259,15 +259,15 @@ function initializeSubscriber() {
 
     // Play/Pause button handlers
     audio.onplay = function () {
-      playButton.innerHTML = '<i class="material-icons">pause</i>';
+      playButton.innerHTML = '<i class="icon-pause"></i>';
     };
 
     audio.onpause = function () {
-      playButton.innerHTML = '<i class="material-icons">play_arrow</i>';
+      playButton.innerHTML = '<i class="icon-play"></i>';
     };
 
     // Set initial button state
-    playButton.innerHTML = '<i class="material-icons">play_arrow</i>';
+    playButton.innerHTML = '<i class="icon-play"></i>';
   }
 
   pc.addTransceiver("audio");
