@@ -1,3 +1,14 @@
+[class^="icon-"], [class*=" icon-"] {
+  font-family: 'reload';
+  font-style: normal;
+  font-weight: normal;
+
+  /* fix buttons height */
+  line-height: 1em;
+
+  /* you can be more comfortable with increased icons size */
+  /* font-size: 120%; */
+}
 
 .icon-arrows-cw { *zoom: expression( this.runtimeStyle['zoom'] = '1', this.innerHTML = '&#x25b6;&nbsp;'); }
 .icon-play { *zoom: expression( this.runtimeStyle['zoom'] = '1', this.innerHTML = '&#xe800;&nbsp;'); }
@@ -8,3 +19,4 @@
 .icon-mic { *zoom: expression( this.runtimeStyle['zoom'] = '1', this.innerHTML = '&#xf130;&nbsp;'); }
 .icon-mute { *zoom: expression( this.runtimeStyle['zoom'] = '1', this.innerHTML = '&#xf131;&nbsp;'); }
 .icon-language-1 { *zoom: expression( this.runtimeStyle['zoom'] = '1', this.innerHTML = '&#xf1ab;&nbsp;'); }
+.icon-brush { *zoom: expression( this.runtimeStyle['zoom'] = '1', this.innerHTML = '&#xf1fc;&nbsp;'); }

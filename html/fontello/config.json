@@ -1,5 +1,5 @@
 {
-  "name": "",
+  "name": "reload",
   "css_prefix_text": "icon-",
   "css_use_suffix": false,
   "hinting": true,
@@ -58,6 +58,12 @@
       "uid": "4fc9b8c122d1b5ca3df42a104a655e8b",
       "css": "language-1",
       "code": 61867,
+      "src": "fontawesome"
+    },
+    {
+      "uid": "fa9a0b7e788c2d78e24cef1de6b70e80",
+      "css": "brush",
+      "code": 61948,
       "src": "fontawesome"
     }
   ]
