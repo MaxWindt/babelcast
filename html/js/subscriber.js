@@ -239,8 +239,10 @@ function initializeSubscriber() {
     // Audio state handlers
     audio.onended = function () {
       console.log("stream ended");
-      // Don't automatically reload, allow user to reconnect manually
-      playButton.innerHTML = "replay";
+      playButton.innerHTML = '<span class="material-icons">refresh</span>';
+      playButton.onclick = function () {
+        window.location.reload();
+      };
     };
 
     audio.onwaiting = function () {
