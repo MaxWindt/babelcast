@@ -55,7 +55,7 @@ function initializeSubscriber() {
             '<i class="material-icons">translate</i> <i id=btn_translation>Translation</i>';
         } else {
           channelButton.innerHTML =
-            '<i class="material-icons">music_note</i> ' + channel;
+            '<i class="material-icons">language</i> ' + channel;
         }
 
         // Add event listener
