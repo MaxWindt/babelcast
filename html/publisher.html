@@ -13,7 +13,7 @@
     <div class="container">
       <div class="title">
         <span class="logo">Babelcast</span
-        ><span class="subtitle">Publisher</span>
+        ><span id="subtitle" class="subtitle">Publisher</span>
       </div>
       <div id="not-supported" class="container hidden">
         <p>
@@ -25,13 +25,10 @@
         <form id="input-form">
           <p>
             Create a channel by entering a channel name in the field below and
-            clicking 'Connect'.
+            clicking 'Connect'.<br />If the server requires a password enter it
+            below, otherwise leave blank.
           </p>
           <table>
-            <tr id="password-form" class="hidden">
-              <th>Password:</th>
-              <td><input type="password" id="password" /></td>
-            </tr>
             <tr>
               <th>Channel:</th>
               <td><input type="text" id="channel" required /></td>
@@ -59,10 +56,13 @@
 
         <div id="output" class="hidden">
           <div id="microphone-meter">
-            <span class="icon-mute" id="microphone"></span>
+            <span class="icon-mic on" id="microphone"></span>
             <meter high="0.9" low="0.1" max="1" value="0"></meter>
           </div>
 
+          <button id="record" class="button">
+            <span class="icon-record"></span>Record
+          </button>
           <button id="reload" class="button">
             <span class="icon-arrows-cw"></span>Reload
           </button>
